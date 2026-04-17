@@ -1,0 +1,29 @@
+﻿# Secrets and local env
+.env
+.env.*
+!.env.example
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Runtime data
+chroma_db/
+uploads/
+.tmp/
+.cache/
+*.log
+uvicorn_*.log
+
+# Local/editor files
+.claude/
+OneDrive/
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
