@@ -1,4 +1,4 @@
-﻿# FinLens
+# FinLens
 
 FinLens is a financial document intelligence app for SEC filings. It ingests annual filings from SEC EDGAR or uploaded PDFs, builds a retrieval index, answers analyst-style questions, compares filings year over year, extracts structured KPIs, and exports metrics to Excel.
 

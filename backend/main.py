@@ -1,4 +1,4 @@
-﻿"""
+"""
 FinLens - Financial Document Intelligence API
 
 Endpoints:
