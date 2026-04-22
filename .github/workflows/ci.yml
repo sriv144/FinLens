@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: tests (py ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11"]
+
+    env:
+      # Placeholders so backend.config and the FastAPI TestClient can boot.
+      # All external services (NVIDIA LLM, EDGAR, Chroma, embedder, reranker)
+      # are patched by tests/test_app.py via unittest.mock.patch, so CI does
+      # not need real credentials or network access to pass.
+      NVIDIA_API_KEY: "nvapi-ci-placeholder"
+      NVIDIA_BASE_URL: "https://integrate.api.nvidia.com/v1"
+      NVIDIA_LLM_MODEL: "nvidia/llama-3.1-nemotron-nano-8b-v1"
+      EDGAR_USER_AGENT: "FinLens CI ci@example.com"
+      CHROMA_DB_PATH: "./chroma_ci_db"
+      UPLOAD_DIR: "./uploads_ci"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Compile check
+        run: python -m compileall backend frontend tests
+
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -v
