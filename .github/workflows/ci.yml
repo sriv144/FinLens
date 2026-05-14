@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: Unit tests
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+      - name: Compile sources
+        run: python -m compileall -q backend frontend tests
+      - name: Run unittest suite
+        env:
+          NVIDIA_API_KEY: dummy-key-for-ci
+          EDGAR_USER_AGENT: "FinLens CI ci@example.com"
+          CHROMA_DB_PATH: ./chroma_db_ci
+          UPLOAD_DIR: ./uploads_ci
+        run: python -m unittest discover -s tests -v

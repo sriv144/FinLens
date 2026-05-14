@@ -1,0 +1,56 @@
+# docker compose up --build
+#
+# Brings up the FastAPI backend on http://localhost:8000 and the Streamlit UI
+# on http://localhost:8501. Both services share the same image (one Dockerfile)
+# and read configuration from a local `.env` file (copy from `.env.example`).
+
+services:
+  backend:
+    build: .
+    image: finlens-app:latest
+    container_name: finlens-backend
+    env_file:
+      - .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - chroma_data:/app/chroma_db
+      - uploads_data:/app/uploads
+    command:
+      ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0) if urllib.request.urlopen('http://localhost:8000/health',timeout=2).status==200 else sys.exit(1)"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
+  frontend:
+    image: finlens-app:latest
+    container_name: finlens-frontend
+    depends_on:
+      - backend
+    env_file:
+      - .env
+    environment:
+      - BACKEND_URL=http://backend:8000
+    ports:
+      - "8501:8501"
+    command:
+      [
+        "streamlit",
+        "run",
+        "frontend/app.py",
+        "--server.address",
+        "0.0.0.0",
+        "--server.port",
+        "8501",
+      ]
+
+volumes:
+  chroma_data:
+  uploads_data:
