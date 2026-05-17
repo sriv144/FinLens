@@ -154,6 +154,50 @@ Invoke-WebRequest http://127.0.0.1:8000/export/DOC_ID_HERE/excel `
   -OutFile FinLens_metrics.xlsx
 ```
 
+## Cross-platform API examples (curl / bash)
+
+The same smoke test as above using POSIX tooling so the README is
+copy-pasteable from macOS or Linux without translation:
+
+Backend + frontend (one terminal each):
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+python -m pip install --upgrade pip
+python -m pip install -r requirements.txt
+cp .env.example .env
+
+# terminal 1
+python -m uvicorn backend.main:app --reload --host 127.0.0.1 --port 8000
+
+# terminal 2
+python -m streamlit run frontend/app.py --server.port 8501
+```
+
+Ingest the latest Apple 10-K from EDGAR:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/ingest/edgar \
+  -H "Content-Type: application/json" \
+  -d '{"ticker":"AAPL","year":0,"form_type":"10-K"}'
+```
+
+Ask a question after ingestion (substitute the returned `doc_id`):
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/query/ \
+  -H "Content-Type: application/json" \
+  -d '{"question":"What were the main revenue drivers?","doc_ids":["DOC_ID_HERE"],"use_hyde":true,"top_k":5}'
+```
+
+Extract metrics and download the Excel report:
+
+```bash
+curl -sS -X POST http://127.0.0.1:8000/metrics/extract/DOC_ID_HERE
+curl -sS http://127.0.0.1:8000/export/DOC_ID_HERE/excel -o FinLens_metrics.xlsx
+```
+
 ## Test and Verify
 
 Run the automated test suite:
@@ -191,6 +235,10 @@ Most settings are controlled with environment variables. Common values:
 | `CHROMA_DB_PATH` | No | Local ChromaDB path |
 | `BACKEND_URL` | No | Frontend target backend URL |
 | `UPLOAD_TIMEOUT_SECONDS` | No | Long request timeout for ingestion and analysis |
+
+## License
+
+Released under the MIT License. See [LICENSE](LICENSE) for details.
 
 ## Notes
 
