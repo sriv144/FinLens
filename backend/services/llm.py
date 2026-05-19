@@ -1,6 +1,12 @@
 """
 LLM service with financial-domain prompts, HyDE query expansion,
 structured metrics extraction, and year-over-year comparison.
+
+The underlying chat completion call is dispatched by LLM_PROVIDER:
+  - "nvidia"    -> NVIDIA-hosted OpenAI-compatible endpoint (default)
+  - "anthropic" -> Anthropic Claude via the official SDK
+All callers (answer_financial_question, generate_hyde_document,
+extract_financial_metrics, compare_filings_yoy) are provider-agnostic.
 """
 
 from __future__ import annotations
@@ -10,10 +16,17 @@ import re
 
 import requests
 
-from backend.config import NVIDIA_API_KEY, NVIDIA_BASE_URL, NVIDIA_LLM_MODEL
+from backend.config import (
+    ANTHROPIC_API_KEY,
+    ANTHROPIC_MODEL,
+    LLM_PROVIDER,
+    NVIDIA_API_KEY,
+    NVIDIA_BASE_URL,
+    NVIDIA_LLM_MODEL,
+)
 
 
-# ── Prompt templates ──────────────────────────────────────────────────────────
+# ── Prompt templates ────────────────────────────────────────────────────────
 
 FINANCIAL_QA_PROMPT = """You are a senior financial analyst AI.
 Answer the QUESTION using ONLY the provided context from the SEC filing.
@@ -102,9 +115,26 @@ SUMMARY: [2-3 sentence overall assessment]"""
 
 # ── Core LLM call ─────────────────────────────────────────────────────────────
 
+_SUPPORTED_PROVIDERS = {"nvidia", "anthropic"}
+
+
 def _call_llm(prompt: str, temperature: float = 0.1, max_tokens: int = 1024) -> str:
+    provider = (LLM_PROVIDER or "nvidia").lower()
+    if provider == "anthropic":
+        return _call_anthropic(prompt, temperature, max_tokens)
+    if provider in ("nvidia", ""):
+        return _call_nvidia(prompt, temperature, max_tokens)
+    raise RuntimeError(
+        f"Unsupported LLM_PROVIDER: {LLM_PROVIDER!r}. "
+        f"Use one of {sorted(_SUPPORTED_PROVIDERS)}."
+    )
+
+
+def _call_nvidia(prompt: str, temperature: float, max_tokens: int) -> str:
     if not NVIDIA_API_KEY:
-        raise RuntimeError("NVIDIA_API_KEY is not configured in .env")
+        raise RuntimeError(
+            "NVIDIA_API_KEY is not configured in .env (LLM_PROVIDER=nvidia)."
+        )
 
     resp = requests.post(
         f"{NVIDIA_BASE_URL}/chat/completions",
@@ -137,7 +167,40 @@ def _call_llm(prompt: str, temperature: float = 0.1, max_tokens: int = 1024) -> 
     return content.strip()
 
 
-# ── HyDE: hypothetical document embedding ────────────────────────────────────
+def _call_anthropic(prompt: str, temperature: float, max_tokens: int) -> str:
+    if not ANTHROPIC_API_KEY:
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY is not configured in .env (LLM_PROVIDER=anthropic)."
+        )
+
+    try:
+        from anthropic import Anthropic
+    except ImportError as exc:
+        raise RuntimeError(
+            "The `anthropic` package is not installed. Run "
+            "`pip install -r requirements.txt` to install it."
+        ) from exc
+
+    client = Anthropic(api_key=ANTHROPIC_API_KEY)
+    message = client.messages.create(
+        model=ANTHROPIC_MODEL,
+        max_tokens=max_tokens,
+        temperature=temperature,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    parts: list[str] = []
+    for block in getattr(message, "content", []) or []:
+        text = getattr(block, "text", None)
+        if text:
+            parts.append(text)
+    text = "".join(parts).strip()
+    if not text:
+        raise RuntimeError("Anthropic API returned empty content.")
+    return text
+
+
+# ── HyDE: hypothetical document embedding ────────────────────────────────────────
 
 def generate_hyde_document(question: str) -> str:
     """
@@ -152,7 +215,7 @@ def generate_hyde_document(question: str) -> str:
     return _call_llm(prompt, temperature=0.3, max_tokens=200)
 
 
-# ── Financial Q&A ─────────────────────────────────────────────────────────────
+# ── Financial Q&A ──────────────────────────────────────────────────────────────────
 
 def answer_financial_question(
     context_chunks: list[str],
@@ -192,7 +255,7 @@ def _build_context(chunks: list[str], metadatas: list[dict] | None) -> str:
     return "\n\n---\n\n".join(parts)
 
 
-# ── Structured metrics extraction ─────────────────────────────────────────────
+# ── Structured metrics extraction ──────────────────────────────────────────────────
 
 def extract_financial_metrics(text: str) -> dict:
     """
@@ -225,7 +288,7 @@ def extract_financial_metrics(text: str) -> dict:
     }
 
 
-# ── Year-over-year comparison ─────────────────────────────────────────────────
+# ── Year-over-year comparison ───────────────────────────────────────────────────────
 
 def compare_filings_yoy(
     chunks1: list[str],

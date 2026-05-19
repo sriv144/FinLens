@@ -3,10 +3,22 @@ import os
 
 load_dotenv()
 
-# LLM
+# LLM provider routing
+# LLM_PROVIDER selects which chat backend handles _call_llm:
+#   - "nvidia"    -> NVIDIA-hosted OpenAI-compatible endpoint (default)
+#   - "anthropic" -> Anthropic Claude via the official SDK
+LLM_PROVIDER: str = os.getenv("LLM_PROVIDER", "nvidia").strip().lower() or "nvidia"
+
+# NVIDIA NIM (default provider)
 NVIDIA_API_KEY: str = os.getenv("NVIDIA_API_KEY", "")
 NVIDIA_BASE_URL: str = os.getenv("NVIDIA_BASE_URL", "https://integrate.api.nvidia.com/v1")
 NVIDIA_LLM_MODEL: str = os.getenv("NVIDIA_LLM_MODEL", "nvidia/llama-3.1-nemotron-nano-8b-v1")
+
+# Anthropic Claude (optional alternative provider)
+# Defaults to Claude Sonnet 4.6 — strong analyst-grade reasoning at moderate cost.
+# Set ANTHROPIC_MODEL to upgrade (e.g. claude-opus-4-7) or downgrade (claude-haiku-4-5).
+ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+ANTHROPIC_MODEL: str = os.getenv("ANTHROPIC_MODEL", "claude-sonnet-4-6")
 
 # Embeddings
 EMBEDDING_MODEL_NAME: str = os.getenv("EMBEDDING_MODEL_NAME", "all-MiniLM-L6-v2")

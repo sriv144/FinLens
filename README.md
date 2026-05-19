@@ -13,6 +13,7 @@ FinLens is a financial document intelligence app for SEC filings. It ingests ann
 - Year-over-year filing comparison across revenue trends, risks, strategy, capital allocation, and management tone.
 - Streamlit UI for ingestion, Q&A, comparison, metrics dashboard, and Excel export.
 - FastAPI backend with interactive Swagger docs.
+- Pluggable LLM provider: NVIDIA NIM (default) or Anthropic Claude.
 
 ## Tech Stack
 
@@ -20,7 +21,7 @@ FinLens is a financial document intelligence app for SEC filings. It ingests ann
 - Frontend: Streamlit
 - Retrieval: ChromaDB, sentence-transformers, cross-encoder reranking
 - Filing parsing: SEC EDGAR JSON/archive APIs, BeautifulSoup, lxml, PyMuPDF
-- LLM provider: NVIDIA-hosted OpenAI-compatible chat completions
+- LLM provider: pluggable — NVIDIA-hosted OpenAI-compatible chat completions (default) or Anthropic Claude (`claude-sonnet-4-6` by default)
 - Reports: openpyxl Excel export
 - Tests: unittest with FastAPI TestClient
 
@@ -44,7 +45,7 @@ requirements.txt          Python dependencies
 ## Requirements
 
 - Python 3.11 or newer recommended.
-- A valid NVIDIA API key with access to the configured chat model.
+- A valid NVIDIA API key with access to the configured chat model, **or** an Anthropic API key if you select the Claude provider.
 - A SEC-compliant EDGAR user agent in the format `Your Name email@example.com`.
 
 ## Quick Start
@@ -178,15 +179,48 @@ Manual smoke test:
 6. Download the Excel report and confirm it opens.
 7. Check `/health`, `/documents`, and `/docs`.
 
+## Pluggable LLM Provider
+
+FinLens dispatches every chat completion (financial Q&A, HyDE expansion,
+KPI extraction, year-over-year compare) through a single `_call_llm` helper
+in `backend/services/llm.py`. Switch providers with one environment variable
+without touching code or prompt templates:
+
+```dotenv
+# default: NVIDIA-hosted OpenAI-compatible endpoint
+LLM_PROVIDER=nvidia
+NVIDIA_API_KEY=nvapi-your-key
+NVIDIA_LLM_MODEL=nvidia/llama-3.1-nemotron-nano-8b-v1
+
+# alternative: Anthropic Claude
+LLM_PROVIDER=anthropic
+ANTHROPIC_API_KEY=sk-ant-your-key
+ANTHROPIC_MODEL=claude-sonnet-4-6
+```
+
+Provider choices:
+
+| `LLM_PROVIDER` | Backend | Default model | When to use |
+| --- | --- | --- | --- |
+| `nvidia` (default) | NVIDIA NIM (OpenAI-compatible) | `nvidia/llama-3.1-nemotron-nano-8b-v1` | Lowest cost; good for high-volume Q&A. |
+| `anthropic` | Anthropic SDK | `claude-sonnet-4-6` | Stronger reasoning for YoY comparison and risk-factor extraction. Override with `claude-opus-4-7` for highest quality or `claude-haiku-4-5` for cheapest Claude tier. |
+
+The Anthropic dependency is declared in `requirements.txt` (`anthropic==0.49.0`)
+and is only imported lazily inside `_call_anthropic`, so installs that stay on
+the default NVIDIA path pay no import-time cost from it.
+
 ## Configuration
 
 Most settings are controlled with environment variables. Common values:
 
 | Variable | Required | Description |
 | --- | --- | --- |
-| `NVIDIA_API_KEY` | Yes | NVIDIA API key for chat completions |
+| `LLM_PROVIDER` | No | `nvidia` (default) or `anthropic`. Selects the chat backend used by `_call_llm`. |
+| `NVIDIA_API_KEY` | If `LLM_PROVIDER=nvidia` | NVIDIA API key for chat completions |
 | `NVIDIA_BASE_URL` | No | OpenAI-compatible NVIDIA endpoint |
-| `NVIDIA_LLM_MODEL` | No | Chat model name |
+| `NVIDIA_LLM_MODEL` | No | Chat model name on NVIDIA NIM |
+| `ANTHROPIC_API_KEY` | If `LLM_PROVIDER=anthropic` | Anthropic API key |
+| `ANTHROPIC_MODEL` | No | Claude model id (default `claude-sonnet-4-6`) |
 | `EDGAR_USER_AGENT` | Yes | SEC-compliant user agent string |
 | `CHROMA_DB_PATH` | No | Local ChromaDB path |
 | `BACKEND_URL` | No | Frontend target backend URL |
@@ -196,5 +230,5 @@ Most settings are controlled with environment variables. Common values:
 
 - `.env`, `.venv`, local uploads, and ChromaDB data are intentionally ignored.
 - EDGAR may rate-limit or reject requests without a real user-agent name and email.
-- Query and comparison features require an NVIDIA key authorized for the configured model.
+- Query and comparison features require either a NVIDIA key (default) or an Anthropic key (when `LLM_PROVIDER=anthropic`).
 - Metrics extraction includes deterministic SEC table parsing so KPI cards can still populate when LLM extraction is unavailable.
